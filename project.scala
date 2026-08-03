@@ -1,0 +1,7 @@
+//> using scala "3.7.4"
+//> using jvm "21"
+//> using dep "org.apache.jena:jena-arq:6.2.0"
+//> using dep "com.fasterxml.jackson.core:jackson-databind:2.22.1"
+//> using dep "com.github.scopt::scopt:4.1.0"
+//> using dep "org.slf4j:slf4j-nop:2.0.18"
+//> using test.dep "org.scalameta::munit:1.3.4"
