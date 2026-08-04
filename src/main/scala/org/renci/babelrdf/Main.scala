@@ -21,7 +21,7 @@ object Main:
     import builder.*
     OParser.sequence(
       programName("babel-rdf"),
-      head("babel-rdf", "0.1.0"),
+      head("babel-rdf", "0.2.0"),
       help("help").abbr("h").text("show this help message"),
       version("version").text("show the version"),
       opt[String]("prefix-map")
@@ -37,11 +37,11 @@ object Main:
       opt[Unit]("quiet")
         .action((_, config) => config.copy(quiet = true))
         .text("do not print conversion counts"),
-      arg[String]("<nodes.jsonl[.gz]>...")
+      arg[String]("<compendium.txt[.gz]>...")
         .unbounded()
         .optional()
         .action((value, config) => config.copy(inputs = config.inputs :+ value))
-        .text("node inputs; omit or use - to read stdin"),
+        .text("compendium JSONL inputs; omit or use - to read stdin"),
       checkConfig { config =>
         val inputs = if config.inputs.isEmpty then Seq("-") else config.inputs
         if inputs.count(_ == "-") > 1 then failure("stdin may only be specified once")
@@ -69,7 +69,7 @@ object Main:
     val mapper = new ObjectMapper()
     val prefixPaths = config.prefixMaps.map(Path.of(_))
     val prefixes = PrefixExpander.load(prefixPaths, mapper)
-    val converter = new NodeConverter(prefixes, mapper)
+    val converter = new CompendiumConverter(prefixes, mapper)
     val inputs = if config.inputs.isEmpty then Seq("-") else config.inputs
     validateDistinctOutput(config.output, inputs, prefixPaths)
     val output = Io.openOutput(config.output)

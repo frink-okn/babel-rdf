@@ -1,7 +1,7 @@
 package org.renci.babelrdf
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.databind.{JsonNode, MappingIterator, ObjectMapper}
 import org.apache.jena.graph.{Node, NodeFactory, Triple}
 import org.apache.jena.riot.system.StreamRDF
 
@@ -15,7 +15,7 @@ final case class ConversionStats(records: Long = 0, triples: Long = 0):
   def +(other: ConversionStats): ConversionStats =
     ConversionStats(records + other.records, triples + other.triples)
 
-final class NodeConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
+final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
   private val exactMatch = iri("skos:exactMatch", "RDF predicate")
   private val category = iri("biolink:category", "RDF predicate")
 
@@ -45,7 +45,7 @@ final class NodeConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     ConversionStats(recordNumber, tripleCount)
 
   private def readNext(
-      records: com.fasterxml.jackson.databind.MappingIterator[JsonNode],
+      records: MappingIterator[JsonNode],
       sourceName: String,
       recordNumber: Long
   ): Option[JsonNode] =
@@ -72,58 +72,37 @@ final class NodeConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     val context = s"$sourceName record $recordNumber"
     if !row.isObject then throw ConversionException(s"$context: expected a JSON object")
 
-    if row.has("subject") || row.has("predicate") || row.has("object") then
-      throw ConversionException(s"$context: edge records are not supported; provide a nodes file")
-
-    val mainId = iri(requiredText(row, "id", context), s"$context field 'id'")
-    val equivalentIdentifiers = requiredArray(row, "equivalent_identifiers", context)
-    val categories = textValues(row, "category", context)
+    val identifiers = requiredIdentifiers(row, context)
+    val leader = iri(identifiers.head, s"$context field 'identifiers[0].i'")
+    val categoryValue = requiredText(row, "type", context)
 
     var count = 0L
-    equivalentIdentifiers.zipWithIndex.foreach { (identifier, index) =>
-      val equivalent = iri(identifier, s"$context field 'equivalent_identifiers[$index]'")
-      output.triple(Triple.create(equivalent, exactMatch, mainId))
+    identifiers.zipWithIndex.foreach { (identifier, index) =>
+      val equivalent = iri(identifier, s"$context field 'identifiers[$index].i'")
+      output.triple(Triple.create(equivalent, exactMatch, leader))
       count += 1
     }
 
-    categories.zipWithIndex.foreach { (categoryValue, index) =>
-      val suffix = if categories.size == 1 then "" else s"[$index]"
-      val categoryIri = iri(categoryValue, s"$context field 'category$suffix'")
-      output.triple(Triple.create(mainId, category, categoryIri))
-      count += 1
-    }
+    val categoryIri = iri(categoryValue, s"$context field 'type'")
+    output.triple(Triple.create(leader, category, categoryIri))
+    count + 1
 
-    count
+  private def requiredIdentifiers(row: JsonNode, context: String): Seq[String] =
+    val value = row.get("identifiers")
+    if value == null || !value.isArray || value.isEmpty then
+      throw ConversionException(s"$context: field 'identifiers' must be a non-empty array")
+
+    value.elements().asScala.zipWithIndex.map { (element, index) =>
+      if !element.isObject then
+        throw ConversionException(s"$context: field 'identifiers[$index]' must be an object")
+      requiredText(element, "i", s"$context field 'identifiers[$index]'")
+    }.toSeq
 
   private def requiredText(row: JsonNode, field: String, context: String): String =
     val value = row.get(field)
     if value == null || !value.isTextual || value.textValue().isBlank then
       throw ConversionException(s"$context: field '$field' must be a non-empty string")
     value.textValue()
-
-  private def requiredArray(row: JsonNode, field: String, context: String): Seq[String] =
-    val value = row.get(field)
-    if value == null || !value.isArray then
-      throw ConversionException(s"$context: field '$field' must be an array of strings")
-
-    value.elements().asScala.zipWithIndex.map { (element, index) =>
-      if !element.isTextual || element.textValue().isBlank then
-        throw ConversionException(s"$context: field '$field[$index]' must be a non-empty string")
-      element.textValue()
-    }.toSeq
-
-  private def textValues(row: JsonNode, field: String, context: String): Seq[String] =
-    val value = row.get(field)
-    if value == null then
-      throw ConversionException(s"$context: field '$field' is required")
-    else if value.isTextual && !value.textValue().isBlank then Seq(value.textValue())
-    else if value.isArray then
-      value.elements().asScala.zipWithIndex.map { (element, index) =>
-        if !element.isTextual || element.textValue().isBlank then
-          throw ConversionException(s"$context: field '$field[$index]' must be a non-empty string")
-        element.textValue()
-      }.toSeq
-    else throw ConversionException(s"$context: field '$field' must be a non-empty string or array of strings")
 
   private def iri(value: String, context: String): Node =
     NodeFactory.createURI(prefixes.expand(value, context))

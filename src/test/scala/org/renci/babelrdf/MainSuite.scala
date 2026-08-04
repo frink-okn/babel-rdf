@@ -20,9 +20,9 @@ class MainSuite extends FunSuite:
   test("refuses to overwrite an aliased input path"):
     val directory = Files.createTempDirectory("babel-rdf-alias-test-")
     val prefixMap = writePrefixMap(directory)
-    val input = directory.resolve("nodes.jsonl")
+    val input = directory.resolve("compendium.txt")
     val original =
-      """{"id":"MONDO:1","category":"biolink:Disease","equivalent_identifiers":["MONDO:1"]}
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1"}]}
         |""".stripMargin
     Files.writeString(input, original)
 
@@ -41,11 +41,11 @@ class MainSuite extends FunSuite:
   test("preserves an existing output when conversion fails"):
     val directory = Files.createTempDirectory("babel-rdf-atomic-test-")
     val prefixMap = writePrefixMap(directory)
-    val input = directory.resolve("nodes.jsonl")
+    val input = directory.resolve("compendium.txt")
     val output = directory.resolve("output.nt")
     Files.writeString(
       input,
-      """{"id":"UNKNOWN:1","category":"biolink:Disease","equivalent_identifiers":["UNKNOWN:1"]}"""
+      """{"type":"biolink:Disease","identifiers":[{"i":"UNKNOWN:1"}]}"""
     )
     Files.writeString(output, "previous output\n")
 

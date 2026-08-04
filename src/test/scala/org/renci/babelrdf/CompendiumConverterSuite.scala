@@ -8,9 +8,8 @@ import org.apache.jena.riot.system.{StreamRDFBase, StreamRDFWriter}
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, IOException}
 import java.nio.charset.StandardCharsets
-import java.util.zip.GZIPOutputStream
 
-class NodeConverterSuite extends FunSuite:
+class CompendiumConverterSuite extends FunSuite:
   private val prefixes = PrefixExpander.fromMap(
     Map(
       "MONDO" -> "http://purl.obolibrary.org/obo/MONDO_",
@@ -23,9 +22,9 @@ class NodeConverterSuite extends FunSuite:
     )
   )
 
-  test("writes exact matches toward the main ID and a category triple"):
+  test("writes every clique member toward the first identifier and types only the leader"):
     val json =
-      """{"id":"MONDO:0033486","name":"leukodystrophy, hypomyelinating, 14","category":"biolink:Disease","equivalent_identifiers":["MONDO:0033486","DOID:0080296","OMIM:617899","UMLS:C4693535","medgen:1635255"]}"""
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:0033486","l":"leukodystrophy"},{"i":"DOID:0080296"},{"i":"OMIM:617899"},{"i":"UMLS:C4693535"},{"i":"medgen:1635255"}],"preferred_name":"leukodystrophy, hypomyelinating, 14"}"""
 
     val (result, stats) = convert(json.getBytes(StandardCharsets.UTF_8))
     val lines = result.linesIterator.toSet
@@ -43,56 +42,64 @@ class NodeConverterSuite extends FunSuite:
       )
     )
 
-  test("reads concatenated JSON objects without retaining the corpus"):
+  test("a singleton clique produces a reflexive match and category"):
     val json =
-      """{"id":"MONDO:1","category":"biolink:Disease","equivalent_identifiers":["MONDO:1"]}
-        |{"id":"MONDO:2","category":"biolink:Disease","equivalent_identifiers":["MONDO:2"]}
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1"}]}"""
+
+    val (result, stats) = convert(json.getBytes(StandardCharsets.UTF_8))
+    assertEquals(stats, ConversionStats(records = 1, triples = 2))
+    assertEquals(result.linesIterator.size, 2)
+    assert(result.contains("<http://purl.obolibrary.org/obo/MONDO_1> <http://www.w3.org/2004/02/skos/core#exactMatch> <http://purl.obolibrary.org/obo/MONDO_1> ."))
+
+  test("reads concatenated compendium records without retaining the corpus"):
+    val json =
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1"}]}
+        |{"type":"biolink:Disease","identifiers":[{"i":"MONDO:2"},{"i":"DOID:2"}]}
         |""".stripMargin
 
     val (_, stats) = convert(json.getBytes(StandardCharsets.UTF_8))
-    assertEquals(stats, ConversionStats(records = 2, triples = 4))
+    assertEquals(stats, ConversionStats(records = 2, triples = 5))
 
-  test("reports an unknown prefix with record context"):
+  test("reports an unknown leader prefix with record context"):
     val json =
-      """{"id":"MISSING:1","category":"biolink:Disease","equivalent_identifiers":["MISSING:1"]}"""
+      """{"type":"biolink:Disease","identifiers":[{"i":"MISSING:1"}]}"""
 
     val error = intercept[ConversionException] {
       convert(json.getBytes(StandardCharsets.UTF_8))
     }
-    assert(error.getMessage.contains("test.jsonl record 1 field 'id': unknown prefix 'MISSING'"))
+    assert(error.getMessage.contains("test.txt record 1 field 'identifiers[0].i': unknown prefix 'MISSING'"))
 
-  test("rejects edge records"):
-    val json =
-      """{"id":"edge-1","subject":"MONDO:1","predicate":"biolink:same_as","object":"MONDO:2"}"""
+  test("rejects an empty identifiers list"):
+    val json = """{"type":"biolink:Disease","identifiers":[]}"""
 
     val error = intercept[ConversionException] {
       convert(json.getBytes(StandardCharsets.UTF_8))
     }
-    assert(error.getMessage.contains("edge records are not supported"))
+    assert(error.getMessage.contains("field 'identifiers' must be a non-empty array"))
 
   test("attributes output failures to the current record"):
     val json =
-      """{"id":"MONDO:1","category":"biolink:Disease","equivalent_identifiers":["MONDO:1"]}"""
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1"}]}"""
     val failingOutput = new StreamRDFBase:
       override def triple(triple: Triple): Unit = throw new IOException("disk full")
-    val converter = new NodeConverter(prefixes, new ObjectMapper())
+    val converter = new CompendiumConverter(prefixes, new ObjectMapper())
 
     val error = intercept[ConversionException] {
       converter.convert(
         new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)),
-        "test.jsonl",
+        "test.txt",
         failingOutput
       )
     }
 
-    assertEquals(error.getMessage, "test.jsonl record 1: could not emit RDF: disk full")
+    assertEquals(error.getMessage, "test.txt record 1: could not emit RDF: disk full")
     assert(error.getCause.isInstanceOf[IOException])
 
   private def convert(bytes: Array[Byte]): (String, ConversionStats) =
     val output = new ByteArrayOutputStream()
     val rdf = StreamRDFWriter.getWriterStream(output, RDFFormat.NTRIPLES_UTF8)
-    val converter = new NodeConverter(prefixes, new ObjectMapper())
+    val converter = new CompendiumConverter(prefixes, new ObjectMapper())
     rdf.start()
-    val stats = converter.convert(new ByteArrayInputStream(bytes), "test.jsonl", rdf)
+    val stats = converter.convert(new ByteArrayInputStream(bytes), "test.txt", rdf)
     rdf.finish()
     (output.toString(StandardCharsets.UTF_8), stats)

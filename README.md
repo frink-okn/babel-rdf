@@ -1,16 +1,19 @@
 # babel-rdf
 
-`babel-rdf` converts Babel KGX node JSONL to streaming N-Triples. It reads one
+`babel-rdf` converts Babel compendium JSONL to streaming N-Triples. It reads one
 JSON object at a time with Jackson and sends each triple directly to Jena's
 streaming N-Triples writer, so memory use does not grow with the corpus.
 
-For a node such as:
+Each compendium row is one identifier clique. The first `identifiers` item is
+the clique leader:
 
 ```json
-{"id":"MONDO:0033486","name":"leukodystrophy, hypomyelinating, 14","category":"biolink:Disease","equivalent_identifiers":["MONDO:0033486","DOID:0080296"]}
+{"type":"biolink:Disease","identifiers":[{"i":"MONDO:0033486"},{"i":"DOID:0080296"}]}
 ```
 
-the converter writes:
+The converter writes one `skos:exactMatch` from every identifier to that leader,
+including the leader's reflexive triple, and one category assertion for the
+leader only:
 
 ```ntriples
 <http://purl.obolibrary.org/obo/MONDO_0033486> <http://www.w3.org/2004/02/skos/core#exactMatch> <http://purl.obolibrary.org/obo/MONDO_0033486> .
@@ -18,11 +21,9 @@ the converter writes:
 <http://purl.obolibrary.org/obo/MONDO_0033486> <https://w3id.org/biolink/vocab/category> <https://w3id.org/biolink/vocab/Disease> .
 ```
 
-The `name` field and all fields other than `id`, `category`, and
-`equivalent_identifiers` are ignored. Every equivalent identifier is emitted,
-including a self-match when the main ID occurs in the array. `category` may be
-a string or an array. Unknown prefixes and edge records are fatal errors rather
-than being silently converted incorrectly.
+All fields other than `type` and `identifiers[*].i` are ignored. A singleton
+clique produces one reflexive exact-match triple and one category triple.
+Unknown prefixes and malformed or empty cliques are fatal errors.
 
 ## Recommended workflow
 
@@ -31,10 +32,17 @@ The Make workflow defaults to the external-drive root
 
 ```text
 Babel/
-  input/2025dec11-umls-level-0/kgx/*.jsonl.gz
+  input/2025dec11-umls-level-0/compendia/*.txt.gz
   metadata/biolink-model-prefix-map.json
-  output/2025dec11-umls-level-0/ntriples/*.nt.gz
+  output/2025dec11-umls-level-0/compendia-ntriples/*.nt.gz
 ```
+
+The server's compendia are uncompressed and total roughly 145 GB. Downloads are
+resumed into a temporary raw `*.download` file, then atomically compressed to
+`.txt.gz`; the raw staging copy is removed after successful compression. Peak
+space therefore includes the uncompressed form of each shard currently being
+compressed. The largest, `Protein.txt`, is about 61.6 GB. Use a lower Make job
+count if parallel staging causes unwanted disk or CPU pressure.
 
 Build and test locally:
 
@@ -43,22 +51,23 @@ make test
 make build
 ```
 
-Download and convert one shard first:
+Download, compress, and convert one small shard first:
 
 ```bash
-make convert FILE=AnatomicalEntity_nodes.jsonl.gz
+make convert FILE=Cell.txt
 ```
 
-Then process all node shards:
+Then process all compendia:
 
 ```bash
 make convert-all
 ```
 
-Downloads go to `*.part` and use `curl --continue-at -`; rerunning Make resumes
-an interrupted download. Finished inputs and outputs are atomically renamed, so
-Make skips completed shards. Conversion is restartable at shard granularity.
-The source JSONL remains gzip-compressed and each output shard is `.nt.gz`.
+Finished compressed inputs and outputs are atomic Make targets, so rerunning
+Make skips completed shards. An interrupted network transfer resumes its raw
+staging file; an interrupted compression restarts compression without another
+download. Conversion is restartable at shard granularity. Override `GZIP` with
+a compatible parallel compressor such as `pigz -p 4` if installed.
 
 Change the storage root without editing the Makefile:
 
@@ -80,7 +89,7 @@ Scala CLI can run the source directly:
 scala-cli run . --server=false -- \
   --prefix-map /path/to/biolink-model-prefix-map.json \
   --output output.nt.gz \
-  input_nodes.jsonl.gz
+  Compendium.txt.gz
 ```
 
 Input compression is detected from the gzip magic bytes. Output is compressed
