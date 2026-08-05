@@ -15,9 +15,12 @@ final case class ConversionStats(records: Long = 0, triples: Long = 0):
   def +(other: ConversionStats): ConversionStats =
     ConversionStats(records + other.records, triples + other.triples)
 
+private final case class Identifier(id: String, label: Option[String])
+
 final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
   private val exactMatch = iri("skos:exactMatch", "RDF predicate")
   private val category = iri("biolink:category", "RDF predicate")
+  private val label = iri("rdfs:label", "RDF predicate")
 
   def convert(input: InputStream, sourceName: String, output: StreamRDF): ConversionStats =
     val records = mapper.readerFor(classOf[JsonNode]).readValues[JsonNode](input)
@@ -73,21 +76,25 @@ final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     if !row.isObject then throw ConversionException(s"$context: expected a JSON object")
 
     val identifiers = requiredIdentifiers(row, context)
-    val leader = iri(identifiers.head, s"$context field 'identifiers[0].i'")
+    val leader = iri(identifiers.head.id, s"$context field 'identifiers[0].i'")
     val categoryValue = requiredText(row, "type", context)
 
     var count = 0L
     identifiers.zipWithIndex.foreach { (identifier, index) =>
-      val equivalent = iri(identifier, s"$context field 'identifiers[$index].i'")
+      val equivalent = iri(identifier.id, s"$context field 'identifiers[$index].i'")
       output.triple(Triple.create(equivalent, exactMatch, leader))
       count += 1
+      identifier.label.foreach { labelValue =>
+        output.triple(Triple.create(equivalent, label, NodeFactory.createLiteralString(labelValue)))
+        count += 1
+      }
     }
 
     val categoryIri = iri(categoryValue, s"$context field 'type'")
     output.triple(Triple.create(leader, category, categoryIri))
     count + 1
 
-  private def requiredIdentifiers(row: JsonNode, context: String): Seq[String] =
+  private def requiredIdentifiers(row: JsonNode, context: String): Seq[Identifier] =
     val value = row.get("identifiers")
     if value == null || !value.isArray || value.isEmpty then
       throw ConversionException(s"$context: field 'identifiers' must be a non-empty array")
@@ -95,7 +102,11 @@ final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     value.elements().asScala.zipWithIndex.map { (element, index) =>
       if !element.isObject then
         throw ConversionException(s"$context: field 'identifiers[$index]' must be an object")
-      requiredText(element, "i", s"$context field 'identifiers[$index]'")
+      val identifierContext = s"$context field 'identifiers[$index]'"
+      Identifier(
+        requiredText(element, "i", identifierContext),
+        optionalString(element, "l")
+      )
     }.toSeq
 
   private def requiredText(row: JsonNode, field: String, context: String): String =
@@ -103,6 +114,9 @@ final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     if value == null || !value.isTextual || value.textValue().isBlank then
       throw ConversionException(s"$context: field '$field' must be a non-empty string")
     value.textValue()
+
+  private def optionalString(row: JsonNode, field: String): Option[String] =
+    Option(row.get(field)).filter(_.isTextual).map(_.textValue())
 
   private def iri(value: String, context: String): Node =
     NodeFactory.createURI(prefixes.expand(value, context))

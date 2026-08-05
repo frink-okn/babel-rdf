@@ -8,22 +8,26 @@ Each compendium row is one identifier clique. The first `identifiers` item is
 the clique leader:
 
 ```json
-{"type":"biolink:Disease","identifiers":[{"i":"MONDO:0033486"},{"i":"DOID:0080296"}]}
+{"type":"biolink:Disease","identifiers":[{"i":"MONDO:0033486","l":"leukodystrophy"},{"i":"DOID:0080296","l":"hypomyelinating leukodystrophy 14"}]}
 ```
 
 The converter writes one `skos:exactMatch` from every identifier to that leader,
-including the leader's reflexive triple, and one category assertion for the
-leader only:
+including the leader's reflexive triple, one `rdfs:label` for every identifier
+whose `l` value is a string, and one category assertion for the leader only:
 
 ```ntriples
 <http://purl.obolibrary.org/obo/MONDO_0033486> <http://www.w3.org/2004/02/skos/core#exactMatch> <http://purl.obolibrary.org/obo/MONDO_0033486> .
+<http://purl.obolibrary.org/obo/MONDO_0033486> <http://www.w3.org/2000/01/rdf-schema#label> "leukodystrophy" .
 <http://purl.obolibrary.org/obo/DOID_0080296> <http://www.w3.org/2004/02/skos/core#exactMatch> <http://purl.obolibrary.org/obo/MONDO_0033486> .
+<http://purl.obolibrary.org/obo/DOID_0080296> <http://www.w3.org/2000/01/rdf-schema#label> "hypomyelinating leukodystrophy 14" .
 <http://purl.obolibrary.org/obo/MONDO_0033486> <https://w3id.org/biolink/vocab/category> <https://w3id.org/biolink/vocab/Disease> .
 ```
 
-All fields other than `type` and `identifiers[*].i` are ignored. A singleton
-clique produces one reflexive exact-match triple and one category triple.
-Unknown prefixes and malformed or empty cliques are fatal errors.
+All fields other than `type`, `identifiers[*].i`, and `identifiers[*].l` are
+ignored. A singleton clique with a label produces a reflexive exact-match
+triple, a label, and a category triple. Empty string labels are emitted; missing
+or non-string `l` values are skipped. Unknown prefixes and malformed or empty
+cliques are fatal errors.
 
 ## Recommended workflow
 

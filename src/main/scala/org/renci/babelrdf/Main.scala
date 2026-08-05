@@ -21,7 +21,7 @@ object Main:
     import builder.*
     OParser.sequence(
       programName("babel-rdf"),
-      head("babel-rdf", "0.2.0"),
+      head("babel-rdf", "0.3.0"),
       help("help").abbr("h").text("show this help message"),
       version("version").text("show the version"),
       opt[String]("prefix-map")

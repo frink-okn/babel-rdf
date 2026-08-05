@@ -22,7 +22,7 @@ class MainSuite extends FunSuite:
     val prefixMap = writePrefixMap(directory)
     val input = directory.resolve("compendium.txt")
     val original =
-      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1"}]}
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1","l":"one"}]}
         |""".stripMargin
     Files.writeString(input, original)
 
@@ -45,7 +45,7 @@ class MainSuite extends FunSuite:
     val output = directory.resolve("output.nt")
     Files.writeString(
       input,
-      """{"type":"biolink:Disease","identifiers":[{"i":"UNKNOWN:1"}]}"""
+      """{"type":"biolink:Disease","identifiers":[{"i":"UNKNOWN:1","l":"unknown"}]}"""
     )
     Files.writeString(output, "previous output\n")
 
@@ -65,7 +65,7 @@ class MainSuite extends FunSuite:
     val path = directory.resolve("prefix-map.json")
     Files.writeString(
       path,
-      """{"MONDO":"http://purl.obolibrary.org/obo/MONDO_","biolink":"https://w3id.org/biolink/vocab/","skos":"http://www.w3.org/2004/02/skos/core#"}"""
+      """{"MONDO":"http://purl.obolibrary.org/obo/MONDO_","biolink":"https://w3id.org/biolink/vocab/","skos":"http://www.w3.org/2004/02/skos/core#","rdfs":"http://www.w3.org/2000/01/rdf-schema#"}"""
     )
     path
 
