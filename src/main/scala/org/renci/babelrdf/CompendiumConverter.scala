@@ -116,7 +116,7 @@ final class CompendiumConverter(prefixes: PrefixExpander, mapper: ObjectMapper):
     value.textValue()
 
   private def optionalString(row: JsonNode, field: String): Option[String] =
-    Option(row.get(field)).filter(_.isTextual).map(_.textValue())
+    Option(row.get(field)).filter(_.isTextual).map(_.textValue()).filter(_.nonEmpty)
 
   private def iri(value: String, context: String): Node =
     NodeFactory.createURI(prefixes.expand(value, context))

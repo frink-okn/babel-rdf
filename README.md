@@ -25,9 +25,8 @@ whose `l` value is a string, and one category assertion for the leader only:
 
 All fields other than `type`, `identifiers[*].i`, and `identifiers[*].l` are
 ignored. A singleton clique with a label produces a reflexive exact-match
-triple, a label, and a category triple. Empty string labels are emitted; missing
-or non-string `l` values are skipped. Unknown prefixes and malformed or empty
-cliques are fatal errors.
+triple, a label, and a category triple. Empty, missing, or non-string `l` values
+are skipped. Unknown prefixes and malformed or empty cliques are fatal errors.
 
 ## Recommended workflow
 

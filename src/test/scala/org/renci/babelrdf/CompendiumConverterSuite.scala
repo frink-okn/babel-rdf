@@ -48,15 +48,15 @@ class CompendiumConverterSuite extends FunSuite:
       )
     )
 
-  test("a singleton clique produces a reflexive match, empty label, and category"):
+  test("a singleton clique skips an empty label"):
     val json =
       """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:1","l":""}]}"""
 
     val (result, stats) = convert(json.getBytes(StandardCharsets.UTF_8))
-    assertEquals(stats, ConversionStats(records = 1, triples = 3))
-    assertEquals(result.linesIterator.size, 3)
+    assertEquals(stats, ConversionStats(records = 1, triples = 2))
+    assertEquals(result.linesIterator.size, 2)
     assert(result.contains("<http://purl.obolibrary.org/obo/MONDO_1> <http://www.w3.org/2004/02/skos/core#exactMatch> <http://purl.obolibrary.org/obo/MONDO_1> ."))
-    assert(result.contains("<http://purl.obolibrary.org/obo/MONDO_1> <http://www.w3.org/2000/01/rdf-schema#label> \"\" ."))
+    assert(!result.contains("http://www.w3.org/2000/01/rdf-schema#label"))
 
   test("reads concatenated compendium records without retaining the corpus"):
     val json =
