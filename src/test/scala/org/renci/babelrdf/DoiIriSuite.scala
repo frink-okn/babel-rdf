@@ -21,6 +21,20 @@ class DoiIriSuite extends FunSuite:
   test("encodes a literal percent sign when it is not an escape"):
     assertEquals(DoiIri.encodeReference("10.1000/foo%zz"), Right("10.1000/foo%25zz"))
 
-  test("rejects raw and percent-encoded whitespace"):
+  test("rejects raw and ASCII percent-encoded whitespace"):
     assert(DoiIri.encodeReference("10.1000/foo bar").isLeft)
     assert(DoiIri.encodeReference("10.1000/foo%20bar").isLeft)
+
+  test("rejects percent-encoded Unicode whitespace and controls"):
+    assert(DoiIri.encodeReference("10.1000/foo%C2%A0bar").isLeft)
+    assert(DoiIri.encodeReference("10.1000/foo%E2%80%83bar").isLeft)
+    assert(DoiIri.encodeReference("10.1000/foo%C2%85bar").isLeft)
+
+  test("preserves percent-encoded non-whitespace Unicode"):
+    val reference = "10.1000/caf%C3%A9"
+
+    assertEquals(DoiIri.encodeReference(reference), Right(reference))
+
+  test("rejects malformed percent-encoded UTF-8"):
+    assert(DoiIri.encodeReference("10.1000/foo%FFbar").isLeft)
+    assert(DoiIri.encodeReference("10.1000/foo%C2%A0%FFbar").isLeft)

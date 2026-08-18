@@ -1,6 +1,7 @@
 package org.renci.babelrdf
 
-import java.nio.charset.StandardCharsets
+import java.nio.ByteBuffer
+import java.nio.charset.{CharacterCodingException, CodingErrorAction, StandardCharsets}
 
 private[babelrdf] object DoiIri:
   private val Hex = "0123456789ABCDEF"
@@ -14,12 +15,10 @@ private[babelrdf] object DoiIri:
 
       while index < reference.length do
         if isPercentEscape(reference, index) then
-          val octet = Integer.parseInt(reference.substring(index + 1, index + 3), 16)
-          if octet <= 0x20 || octet == 0x7f then
-            return Left(
-              f"DOI reference contains percent-encoded whitespace or control byte 0x$octet%02X at index $index"
-            )
-          index += 3
+          val end = percentEscapeRunEnd(reference, index)
+          validatePercentEscapeRun(reference, index, end) match
+            case Some(reason) => return Left(reason)
+            case None => index = end
         else
           val codePoint = reference.codePointAt(index)
           if isWhitespaceOrControl(codePoint) then
@@ -62,6 +61,48 @@ private[babelrdf] object DoiIri:
       value.charAt(index) == '%' &&
       isHexDigit(value.charAt(index + 1)) &&
       isHexDigit(value.charAt(index + 2))
+
+  private def percentEscapeRunEnd(value: String, start: Int): Int =
+    var end = start
+    while isPercentEscape(value, end) do end += 3
+    end
+
+  private def validatePercentEscapeRun(value: String, start: Int, end: Int): Option[String] =
+    val bytes = new Array[Byte]((end - start) / 3)
+    var index = start
+    var byteIndex = 0
+
+    while index < end do
+      val octet = Integer.parseInt(value.substring(index + 1, index + 3), 16)
+      if octet <= 0x20 || octet == 0x7f then
+        return Some(
+          f"DOI reference contains percent-encoded whitespace or control byte 0x$octet%02X at index $index"
+        )
+      bytes(byteIndex) = octet.toByte
+      byteIndex += 1
+      index += 3
+
+    decodeUtf8(bytes) match
+      case None => Some(s"DOI reference contains malformed percent-encoded UTF-8 at index $start")
+      case Some(decoded) =>
+        var decodedIndex = 0
+        var invalid: Option[String] = None
+        while decodedIndex < decoded.length && invalid.isEmpty do
+          val codePoint = decoded.codePointAt(decodedIndex)
+          if isWhitespaceOrControl(codePoint) then
+            invalid = Some(
+              f"DOI reference contains percent-encoded whitespace or control character U+$codePoint%04X at index $start"
+            )
+          decodedIndex += Character.charCount(codePoint)
+        invalid
+
+  private def decodeUtf8(bytes: Array[Byte]): Option[String] =
+    val decoder = StandardCharsets.UTF_8
+      .newDecoder()
+      .onMalformedInput(CodingErrorAction.REPORT)
+      .onUnmappableCharacter(CodingErrorAction.REPORT)
+    try Some(decoder.decode(ByteBuffer.wrap(bytes)).toString)
+    catch case _: CharacterCodingException => None
 
   private def isHexDigit(value: Char): Boolean =
     value >= '0' && value <= '9' ||
