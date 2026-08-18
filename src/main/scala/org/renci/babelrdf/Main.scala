@@ -12,7 +12,8 @@ final case class Config(
     prefixMaps: Seq[String] = Seq.empty,
     output: String = "-",
     inputs: Seq[String] = Seq.empty,
-    quiet: Boolean = false
+    quiet: Boolean = false,
+    strictInvalidIris: Boolean = false
 )
 
 object Main:
@@ -37,6 +38,9 @@ object Main:
       opt[Unit]("quiet")
         .action((_, config) => config.copy(quiet = true))
         .text("do not print conversion counts"),
+      opt[Unit]("strict-invalid-iris")
+        .action((_, config) => config.copy(strictInvalidIris = true))
+        .text("fail instead of filtering identifiers that expand to invalid IRIs"),
       arg[String]("<compendium.txt[.gz]>...")
         .unbounded()
         .optional()
@@ -69,7 +73,9 @@ object Main:
     val mapper = new ObjectMapper()
     val prefixPaths = config.prefixMaps.map(Path.of(_))
     val prefixes = PrefixExpander.load(prefixPaths, mapper)
-    val converter = new CompendiumConverter(prefixes, mapper)
+    val invalidIriPolicy =
+      if config.strictInvalidIris then InvalidIriPolicy.Fail else InvalidIriPolicy.Filter
+    val converter = new CompendiumConverter(prefixes, mapper, invalidIriPolicy)
     val inputs = if config.inputs.isEmpty then Seq("-") else config.inputs
     validateDistinctOutput(config.output, inputs, prefixPaths)
     val output = Io.openOutput(config.output)
@@ -92,7 +98,12 @@ object Main:
         throw error
 
     if !config.quiet then
-      System.err.println(s"Converted ${total.records} records to ${total.triples} triples")
+      val filtering =
+        if total.invalidIdentifiers == 0 then ""
+        else
+          s"; filtered ${total.invalidIdentifiers} invalid identifiers" +
+            s" and dropped ${total.droppedCliques} cliques"
+      System.err.println(s"Converted ${total.records} records to ${total.triples} triples$filtering")
 
   private def validateDistinctOutput(outputName: String, inputs: Seq[String], prefixMaps: Seq[Path]): Unit =
     if outputName != "-" then

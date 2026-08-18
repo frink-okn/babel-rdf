@@ -26,7 +26,15 @@ whose `l` value is a string, and one category assertion for the leader only:
 All fields other than `type`, `identifiers[*].i`, and `identifiers[*].l` are
 ignored. A singleton clique with a label produces a reflexive exact-match
 triple, a label, and a category triple. Empty, missing, or non-string `l` values
-are skipped. Unknown prefixes and malformed or empty cliques are fatal errors.
+are skipped. Expanded identifiers are validated as absolute IRIs before any
+triples for the row are written. An invalid leader drops the entire clique; an
+invalid secondary identifier is skipped without changing the leader. Warnings
+and final counts report all filtering. Unknown prefixes, invalid categories,
+and malformed or empty cliques are fatal errors. Pass `--strict-invalid-iris`
+to make any invalid identifier fatal instead of filtering it. DOI references
+receive prefix-specific handling: unsafe resolver-path characters are
+percent-encoded while existing `%HH` escapes are preserved. Raw or
+percent-encoded whitespace and control characters still make a DOI invalid.
 
 ## Recommended workflow
 
@@ -100,4 +108,6 @@ when its name ends in `.gz`. Multiple inputs may be streamed into one output;
 use `-` or omit inputs to read stdin, and use `--output -` for stdout.
 File output is written to a temporary sibling and atomically installed only
 after successful conversion, so a failed run preserves any prior output. The
-CLI refuses an output path that aliases an input or prefix-map file.
+CLI refuses an output path that aliases an input or prefix-map file. By default,
+invalid secondary identifier IRIs are filtered and cliques with invalid leaders
+are dropped; use `--strict-invalid-iris` when validation should fail fast.

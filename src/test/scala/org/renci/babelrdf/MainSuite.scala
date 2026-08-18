@@ -16,6 +16,7 @@ class MainSuite extends FunSuite:
     val result = runMain("--help")
     assertEquals(result.exitCode, 0)
     assert(result.stdout.contains("Usage: babel-rdf"))
+    assert(result.stdout.contains("--strict-invalid-iris"))
 
   test("refuses to overwrite an aliased input path"):
     val directory = Files.createTempDirectory("babel-rdf-alias-test-")
@@ -59,6 +60,30 @@ class MainSuite extends FunSuite:
 
     assertEquals(result.exitCode, 1)
     assert(result.stderr.contains("unknown prefix 'UNKNOWN'"))
+    assertEquals(Files.readString(output), "previous output\n")
+
+  test("strict invalid IRI handling preserves an existing output"):
+    val directory = Files.createTempDirectory("babel-rdf-invalid-iri-test-")
+    val prefixMap = writePrefixMap(directory)
+    val input = directory.resolve("compendium.txt")
+    val output = directory.resolve("output.nt")
+    Files.writeString(
+      input,
+      """{"type":"biolink:Disease","identifiers":[{"i":"MONDO:bad value"}]}"""
+    )
+    Files.writeString(output, "previous output\n")
+
+    val result = runMain(
+      "--prefix-map",
+      prefixMap.toString,
+      "--strict-invalid-iris",
+      "--output",
+      output.toString,
+      input.toString
+    )
+
+    assertEquals(result.exitCode, 1)
+    assert(result.stderr.contains("invalid identifier 'MONDO:bad value'"))
     assertEquals(Files.readString(output), "previous output\n")
 
   private def writePrefixMap(directory: Path): Path =
