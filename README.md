@@ -1,6 +1,6 @@
 # babel-rdf
 
-`babel-rdf` converts Babel compendium JSONL to streaming N-Triples. It reads one
+`babel-rdf` converts [Babel compendium](https://github.com/NCATSTranslator/Babel/blob/main/docs/DataFormats.md) JSONL to streaming N-Triples. It reads one
 JSON object at a time with Jackson and sends each triple directly to Jena's
 streaming N-Triples writer, so memory use does not grow with the corpus.
 
